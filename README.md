@@ -43,6 +43,28 @@ pip install -r requirements.txt
 python run.py
 ```
 
+## GPIB (USB-GPIB çevirici) ile bağlantı
+
+Bilgisayara USB-RS232 yerine **USB-GPIB adaptörü** ile bağlanıyorsanız:
+
+1. Adaptörün sürücüsünü kurun (markasına göre):
+   - **ADLINK USB-3488A**: [ADLINK USB-3488A sayfasından](https://www.adlinktech.com/Products/GPIB_Modular_Instruments/GPIB/USB-3488A)
+     **ADL-GPIB** sürücüsünü (3.0+) indirip kurun. ADLINK sürücüsü NI-488.2
+     uyumlu `gpib-32.dll` sağlar; program buna `pyvisa-py + gpib-ctypes`
+     üzerinden erişir (requirements.txt ile birlikte kurulur).
+   - **National Instruments GPIB-USB-HS/HS+** veya **Keithley KUSB-488B**:
+     [NI-488.2 sürücüsü](https://www.ni.com/en/support/downloads/drivers/download.ni-488-2.html)
+     + [NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html)
+   - **Keysight/Agilent 82357A/B**:
+     [Keysight IO Libraries Suite](https://www.keysight.com/find/iosuite) (VISA dahildir)
+2. Cihazda `MENU → COMMUNICATION → GPIB` seçin; adres varsayılan **24**'tür.
+3. Programda *Bağlantı türü: GPIB* seçin; kaynak listesinde
+   `GPIB0::24::INSTR` görünmelidir → **Bağlan**. Program önce sistem
+   VISA'sını, bulamazsa pyvisa-py yedeğini otomatik dener.
+
+Aygıt Yöneticisi'nde adaptör sarı ünlemle "Diğer aygıtlar" altında
+görünüyorsa sürücü kurulmamış demektir (1. adım).
+
 ## Keithley 2400 ön panel ayarı (bir kez)
 
 Cihazın RS-232 ayarları programdaki bağlantı ayarlarıyla aynı olmalıdır:

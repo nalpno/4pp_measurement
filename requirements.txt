@@ -2,3 +2,6 @@ PySide6>=6.5
 pyserial>=3.5
 pyqtgraph>=0.13
 numpy>=1.24
+pyvisa>=1.13
+pyvisa-py>=0.7
+gpib-ctypes>=0.3

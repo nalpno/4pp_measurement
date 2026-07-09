@@ -27,8 +27,9 @@ from . import analysis
 from .config import MeasurementConfig, SourceCfg, MeasureCfg, SampleCfg
 from .export import write_csv
 from .instrument import (
-    BAUD_RATES, InstrumentError, Keithley2400, SimulatedKeithley2400,
-    list_serial_ports,
+    BAUD_RATES, DEFAULT_GPIB_ADDRESS, InstrumentError, Keithley2400,
+    Keithley2400Visa, SimulatedKeithley2400, list_serial_ports,
+    list_visa_resources,
 )
 from .worker import MeasurementWorker, build_levels
 
@@ -111,6 +112,7 @@ class MainWindow(QMainWindow):
         self._on_function_changed()
         self._on_mode_changed()
         self._on_geometry_changed()
+        self._on_conn_type_changed()
         self._refresh_ports()
 
     # ------------------------------------------------------------------ UI
@@ -156,8 +158,15 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
 
     def _connection_group(self) -> QGroupBox:
-        g = QGroupBox("Bağlantı (RS-232)")
+        g = QGroupBox("Bağlantı")
         form = QFormLayout(g)
+        self.conn_form = form
+
+        self.conn_type_combo = QComboBox()
+        self.conn_type_combo.addItem("RS-232 (USB-seri çevirici)", "serial")
+        self.conn_type_combo.addItem("GPIB (USB-GPIB çevirici / VISA)", "gpib")
+        self.conn_type_combo.currentIndexChanged.connect(self._on_conn_type_changed)
+        form.addRow("Bağlantı türü:", self.conn_type_combo)
 
         self.port_combo = QComboBox()
         btn_refresh = QPushButton("Yenile")
@@ -165,7 +174,21 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         row.addWidget(self.port_combo, 1)
         row.addWidget(btn_refresh)
-        form.addRow("Seri port:", self._wrap(row))
+        self.port_row = self._wrap(row)
+        form.addRow("Seri port:", self.port_row)
+
+        self.visa_combo = QComboBox()
+        self.visa_combo.setEditable(True)  # kaynak bulunamazsa elle yazılabilsin
+        self.visa_combo.setToolTip(
+            "Keithley 2400 fabrika ayarıyla GPIB0::24::INSTR olarak görünür. "
+            "Liste boşsa NI-VISA / Keysight IO Libraries kurulumunu kontrol edin.")
+        btn_visa_refresh = QPushButton("Yenile")
+        btn_visa_refresh.clicked.connect(self._refresh_visa)
+        row = QHBoxLayout()
+        row.addWidget(self.visa_combo, 1)
+        row.addWidget(btn_visa_refresh)
+        self.visa_row = self._wrap(row)
+        form.addRow("GPIB kaynağı:", self.visa_row)
 
         self.baud_combo = QComboBox()
         for b in sorted(BAUD_RATES):
@@ -467,8 +490,35 @@ class MainWindow(QMainWindow):
             if idx >= 0:
                 self.port_combo.setCurrentIndex(idx)
 
+    def _refresh_visa(self) -> None:
+        current = self.visa_combo.currentText()
+        self.visa_combo.clear()
+        resources = list_visa_resources()
+        for r in resources:
+            self.visa_combo.addItem(r)
+        default = f"GPIB0::{DEFAULT_GPIB_ADDRESS}::INSTR"
+        if not resources:
+            self.visa_combo.addItem(default)
+            self._log("VISA kaynağı bulunamadı — sürücü/VISA kurulumunu kontrol edin. "
+                      "Adres elle de yazılabilir.")
+        if current:
+            idx = self.visa_combo.findText(current)
+            self.visa_combo.setCurrentIndex(idx if idx >= 0 else 0)
+
+    def _on_conn_type_changed(self) -> None:
+        is_serial = self.conn_type_combo.currentData() == "serial"
+        form = self.conn_form
+        form.setRowVisible(self.port_row, is_serial)
+        form.setRowVisible(self.baud_combo, is_serial)
+        form.setRowVisible(self.term_combo, is_serial)
+        form.setRowVisible(self.flow_check, is_serial)
+        form.setRowVisible(self.visa_row, not is_serial)
+        if not is_serial and self.visa_combo.count() == 0:
+            self._refresh_visa()
+
     def _on_sim_toggled(self, on: bool) -> None:
-        for w in (self.port_combo, self.baud_combo, self.term_combo, self.flow_check):
+        for w in (self.conn_type_combo, self.port_combo, self.baud_combo,
+                  self.term_combo, self.flow_check, self.visa_combo):
             w.setEnabled(not on)
 
     def _on_function_changed(self) -> None:
@@ -541,6 +591,12 @@ class MainWindow(QMainWindow):
         try:
             if self.sim_check.isChecked():
                 self.instrument = SimulatedKeithley2400()
+            elif self.conn_type_combo.currentData() == "gpib":
+                resource = self.visa_combo.currentText().strip()
+                if not resource:
+                    raise InstrumentError("GPIB kaynağı seçilmedi/yazılmadı "
+                                          "(örn: GPIB0::24::INSTR).")
+                self.instrument = Keithley2400Visa(resource=resource)
             else:
                 port = self.port_combo.currentData()
                 if not port:
@@ -803,6 +859,8 @@ class MainWindow(QMainWindow):
         if self.instrument:
             self.instrument.close()
         state = {
+            "conn_type": self.conn_type_combo.currentData(),
+            "visa_resource": self.visa_combo.currentText(),
             "baud": self.baud_combo.currentText(),
             "term": self.term_combo.currentText(),
             "flow": self.flow_check.isChecked(),
@@ -861,6 +919,10 @@ class MainWindow(QMainWindow):
             if idx >= 0:
                 combo.setCurrentIndex(idx)
 
+        combo_by_data(self.conn_type_combo, st.get("conn_type", "serial"))
+        if st.get("visa_resource"):
+            self.visa_combo.addItem(st["visa_resource"])
+            self.visa_combo.setCurrentText(st["visa_resource"])
         combo_by_text(self.baud_combo, st.get("baud", "9600"))
         combo_by_text(self.term_combo, st.get("term", "CRLF"))
         self.flow_check.setChecked(st.get("flow", False))
