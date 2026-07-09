@@ -15,7 +15,11 @@ from __future__ import annotations
 import math
 import random
 import time
+import warnings
 from typing import List, Optional, Tuple
+
+# pyvisa-py'nin GPIB ile ilgisiz TCPIP tarama bilgilendirmelerini gizle
+warnings.filterwarnings("ignore", category=UserWarning, module=r"pyvisa_py\..*")
 
 from .config import MeasurementConfig
 
