@@ -77,10 +77,19 @@ class _Keithley2400Base:
             cmds.append(f":SOUR:{src}:RANG {s.range_value:.6E}")
 
         cmds.append(f':SENS:FUNC "{sen}"')
+        # Compliance'ı ayarlamadan ÖNCE ölçüm aralığını otomatiğe al: aksi
+        # halde cihaz düşük bir sabit aralıkta kalmışsa yüksek compliance
+        # "824, Cannot exceed compliance range" hatası verir.
+        cmds.append(f":SENS:{sen}:RANG:AUTO ON")
         cmds.append(f":SENS:{sen}:PROT {s.compliance:.6E}")
-        if m.range_auto:
-            cmds.append(f":SENS:{sen}:RANG:AUTO ON")
-        else:
+        if not m.range_auto:
+            # Sabit ölçüm aralığı compliance'tan küçük olamaz (aynı hata).
+            if m.range_value < s.compliance:
+                unit = "V" if sen == "VOLT" else "A"
+                raise InstrumentError(
+                    f"Ölçüm aralığı ({m.range_value:g} {unit}) compliance "
+                    f"değerinden ({s.compliance:g} {unit}) küçük olamaz. "
+                    f"Ölçüm aralığını büyütün, 'Oto' seçin ya da compliance'ı düşürün.")
             cmds.append(f":SENS:{sen}:RANG {m.range_value:.6E}")
         cmds.append(f":SENS:{sen}:NPLC {m.nplc:g}")
 
