@@ -265,6 +265,193 @@ class Keithley2400Visa(_Keithley2400Base):
             pass
 
 
+# --- NI-488.2 (gpib-32.dll) doğrudan sürücü katmanı --------------------------
+# ADLINK USB-3488A dahil çoğu adaptör NI-488.2 uyumlu gpib-32.dll sağlar.
+# gpib-ctypes ara katmanı ADLINK ile "Errno 22" verebildiğinden, DLL'i
+# doğrudan çağırmak en güvenilir yoldur.
+
+_GPIB_ERR = 0x8000   # ibsta ERR biti
+_GPIB_TIMO = 0x4000  # ibsta TIMO biti
+# NI zaman aşımı kodları (kod: saniye)
+_TMO_TABLE = [
+    (1, 10e-6), (2, 30e-6), (3, 100e-6), (4, 300e-6), (5, 1e-3), (6, 3e-3),
+    (7, 10e-3), (8, 30e-3), (9, 100e-3), (10, 300e-3), (11, 1.0), (12, 3.0),
+    (13, 10.0), (14, 30.0), (15, 100.0), (16, 300.0), (17, 1000.0),
+]
+_IBERR_MSG = {
+    0: "EDVR: sistem/sürücü hatası (adaptör bağlı/açık mı?)",
+    1: "ECIC: adaptör denetleyici (Controller-in-Charge) değil",
+    2: "ENOL: hatta cihaz yok — kablo, adres (24?) ve cihazın açık olduğunu kontrol edin",
+    3: "EADR: adresleme hatası",
+    4: "EARG: geçersiz argüman (kart numarası/adres aralık dışı)",
+    5: "ESAC: adaptör sistem denetleyicisi değil",
+    6: "EABO: işlem iptal edildi (zaman aşımı olabilir)",
+    7: "ENEB: kart bulunamadı — GPIB kart numarası (GPIB0/GPIB1) yanlış olabilir",
+    10: "EOIP: G/Ç zaten sürüyor",
+    11: "ECAP: özellik desteklenmiyor",
+    12: "EFSO: dosya sistemi hatası",
+    14: "EBUS: GPIB veri yolu hatası",
+    15: "ESTB: durum baytı kuyruğu taştı",
+    16: "ESRQ: SRQ takılı kaldı",
+    20: "ETAB: tablo hatası",
+}
+
+
+def _tmo_code(seconds: float) -> int:
+    for code, secs in _TMO_TABLE:
+        if secs >= seconds:
+            return code
+    return 17  # en uzun (1000 s)
+
+
+class Keithley2400Gpib32(_Keithley2400Base):
+    """gpib-32.dll (NI-488.2 API) üzerinden doğrudan GPIB kontrolü.
+
+    resource: 'GPIB0::24::INSTR' biçiminde ya da düz adres. Board indeksi
+    (GPIB0 -> 0) ve birincil adres (PAD) buradan ayrıştırılır.
+    """
+
+    def __init__(self, resource: str, timeout: float = 10.0):
+        import ctypes
+        import re
+
+        m = re.match(r"\s*GPIB(\d+)\s*::\s*(\d+)", resource, re.IGNORECASE)
+        if m:
+            self._board, self._pad = int(m.group(1)), int(m.group(2))
+        else:
+            self._board = 0
+            try:
+                self._pad = int(resource.strip())
+            except ValueError:
+                self._pad = DEFAULT_GPIB_ADDRESS
+        self._resource = resource
+        self._default_tmo = _tmo_code(timeout)
+
+        try:
+            load = ctypes.windll.LoadLibrary  # yalnızca Windows (stdcall)
+        except AttributeError as e:
+            raise InstrumentError(
+                "Doğrudan gpib-32.dll yalnızca Windows'ta kullanılabilir."
+            ) from e
+
+        lib = None
+        errs: List[str] = []
+        for name in ("gpib-32.dll", r"C:\Windows\System32\gpib-32.dll",
+                     r"C:\Windows\SysWOW64\gpib-32.dll"):
+            try:
+                lib = load(name)
+                break
+            except Exception as e:  # noqa: BLE001
+                errs.append(f"{name}: {e}")
+        if lib is None:
+            raise InstrumentError(
+                "gpib-32.dll yüklenemedi (ADLINK ADL-GPIB sürücüsü kurulu mu?):\n"
+                + "\n".join(errs))
+        self._lib = lib
+
+        c_int, c_long, c_char_p = ctypes.c_int, ctypes.c_long, ctypes.c_char_p
+        lib.ibdev.argtypes = [c_int, c_int, c_int, c_int, c_int, c_int]
+        lib.ibdev.restype = c_int
+        lib.ibwrt.argtypes = [c_int, c_char_p, c_long]
+        lib.ibwrt.restype = c_int
+        lib.ibrd.argtypes = [c_int, c_char_p, c_long]
+        lib.ibrd.restype = c_int
+        lib.ibonl.argtypes = [c_int, c_int]
+        lib.ibonl.restype = c_int
+        lib.ibclr.argtypes = [c_int]
+        lib.ibclr.restype = c_int
+        try:
+            lib.ibtmo.argtypes = [c_int, c_int]
+            lib.ibtmo.restype = c_int
+        except AttributeError:
+            pass
+
+        # ibdev(board, pad, sad=0, tmo, eot=1 (son baytta EOI), eos=0)
+        ud = lib.ibdev(self._board, self._pad, 0, self._default_tmo, 1, 0)
+        if ud < 0:
+            raise InstrumentError(
+                f"GPIB cihazı açılamadı (GPIB{self._board}::{self._pad}). "
+                + self._err_text())
+        self._ud = ud
+        self._cur_tmo = self._default_tmo
+        try:
+            lib.ibclr(ud)  # cihazı temizle
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _iberr(self) -> int:
+        try:
+            self._lib.ThreadIberr.restype = __import__("ctypes").c_int
+            return int(self._lib.ThreadIberr())
+        except Exception:  # noqa: BLE001
+            try:
+                import ctypes
+                return int(ctypes.c_int.in_dll(self._lib, "iberr").value)
+            except Exception:  # noqa: BLE001
+                return -1
+
+    def _err_text(self) -> str:
+        code = self._iberr()
+        return _IBERR_MSG.get(code, f"iberr={code}")
+
+    def _set_tmo(self, tmo_code: int) -> None:
+        if tmo_code != self._cur_tmo and hasattr(self._lib, "ibtmo"):
+            self._lib.ibtmo(self._ud, tmo_code)
+            self._cur_tmo = tmo_code
+
+    def write(self, cmd: str) -> None:
+        data = (cmd + "\n").encode("ascii")
+        sta = self._lib.ibwrt(self._ud, data, len(data))
+        if sta & _GPIB_ERR:
+            raise InstrumentError(f"GPIB yazma hatası ({cmd!r}): " + self._err_text())
+
+    def query(self, cmd: str, timeout: Optional[float] = None) -> str:
+        import ctypes
+        if timeout is not None:
+            self._set_tmo(_tmo_code(timeout))
+        else:
+            self._set_tmo(self._default_tmo)
+        self.write(cmd)
+        buf = ctypes.create_string_buffer(8192)
+        sta = self._lib.ibrd(self._ud, buf, len(buf) - 1)
+        if sta & _GPIB_ERR:
+            raise InstrumentError(f"GPIB okuma hatası ({cmd!r}): " + self._err_text())
+        # yanıt zero ile sonlanan tamponda; ilk NUL'a kadar ASCII çöz
+        return buf.value.decode("ascii", errors="replace").strip()
+
+    def open_session(self) -> str:
+        return self.query("*IDN?", timeout=5.0)
+
+    def close(self) -> None:
+        try:
+            self.write(":OUTP OFF")
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self._lib.ibonl(self._ud, 0)  # cihazı çevrimdışı yap
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def connect_gpib(resource: str, timeout: float = 10.0):
+    """GPIB bağlantısını en güvenilir yoldan aç.
+
+    Sıra: (1) doğrudan gpib-32.dll (ADLINK için en sağlamı),
+    (2) sistem VISA'sı / pyvisa-py. Hepsi başarısızsa birleşik hata verir.
+    """
+    errors: List[str] = []
+    try:
+        return Keithley2400Gpib32(resource, timeout=timeout)
+    except InstrumentError as e:
+        errors.append(f"gpib-32.dll doğrudan: {e}")
+    try:
+        return Keithley2400Visa(resource, timeout=timeout)
+    except InstrumentError as e:
+        errors.append(f"VISA: {e}")
+    raise InstrumentError(
+        f"GPIB bağlantısı kurulamadı ({resource}).\n\n" + "\n\n".join(errors))
+
+
 class SimulatedKeithley2400(_Keithley2400Base):
     """Cihaz olmadan arayüzü denemek için simülatör.
 

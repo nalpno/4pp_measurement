@@ -28,7 +28,7 @@ from .config import MeasurementConfig, SourceCfg, MeasureCfg, SampleCfg
 from .export import write_csv
 from .instrument import (
     BAUD_RATES, DEFAULT_GPIB_ADDRESS, InstrumentError, Keithley2400,
-    Keithley2400Visa, SimulatedKeithley2400, list_serial_ports,
+    SimulatedKeithley2400, connect_gpib, list_serial_ports,
     list_visa_resources,
 )
 from .worker import MeasurementWorker, build_levels
@@ -596,7 +596,7 @@ class MainWindow(QMainWindow):
                 if not resource:
                     raise InstrumentError("GPIB kaynağı seçilmedi/yazılmadı "
                                           "(örn: GPIB0::24::INSTR).")
-                self.instrument = Keithley2400Visa(resource=resource)
+                self.instrument = connect_gpib(resource)
             else:
                 port = self.port_combo.currentData()
                 if not port:

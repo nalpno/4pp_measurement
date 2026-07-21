@@ -59,8 +59,19 @@ Bilgisayara USB-RS232 yerine **USB-GPIB adaptörü** ile bağlanıyorsanız:
      [Keysight IO Libraries Suite](https://www.keysight.com/find/iosuite) (VISA dahildir)
 2. Cihazda `MENU → COMMUNICATION → GPIB` seçin; adres varsayılan **24**'tür.
 3. Programda *Bağlantı türü: GPIB* seçin; kaynak listesinde
-   `GPIB0::24::INSTR` görünmelidir → **Bağlan**. Program önce sistem
-   VISA'sını, bulamazsa pyvisa-py yedeğini otomatik dener.
+   `GPIB0::24::INSTR` görünmelidir → **Bağlan**. Program bağlanırken önce
+   `gpib-32.dll`'i doğrudan (ADLINK için en güvenilir yol), olmazsa sistem
+   VISA'sını/pyvisa-py yedeğini dener.
+
+**"dev() error: Errno 22" veya "GPIB cihazı açılamadı" hatası:** DLL yüklendi
+ama cihaz açılamadı demektir. Kontrol listesi:
+
+- Cihaz açık mı, GPIB kablosu takılı mı, Keithley `MENU → COMMUNICATION → GPIB`
+  ve adres **24** mü?
+- ADLINK sürücüsüyle gelen **GPIB Utility / Interactive Control** ile cihazı
+  taratın; adres 24'te Keithley görünüyorsa donanım sağlamdır.
+- Adaptör *GPIB0* değil başka bir kart numarasına atanmış olabilir; kaynak
+  kutusuna elle `GPIB1::24::INSTR` yazıp deneyin (kutu düzenlenebilir).
 
 Aygıt Yöneticisi'nde adaptör sarı ünlemle "Diğer aygıtlar" altında
 görünüyorsa sürücü kurulmamış demektir (1. adım).
