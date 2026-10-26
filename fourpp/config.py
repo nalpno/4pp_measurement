@@ -48,7 +48,7 @@ class SampleCfg:
     name: str = ""
     geometry: str = "infinite"         # "infinite" | "circle" | "manual"
     diameter_mm: float = 100.0         # dairesel numune çapı
-    spacing_mm: float = 1.016          # Signatone SP4 tipik uç aralığı (40 mil)
+    spacing_mm: float = 1.5875        # Signatone SP4-62085TRY uç aralığı (62.5 mil)
     manual_factor: float = 4.5324
     thickness_mm: float = 0.0          # 0 = bilinmiyor (özdirenç hesaplanmaz)
     thickness_corr: bool = True        # kalın numunede t/s düzeltmesi

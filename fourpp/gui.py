@@ -371,11 +371,12 @@ class MainWindow(QMainWindow):
         self.spacing_spin = QDoubleSpinBox()
         self.spacing_spin.setRange(0.01, 25.0)
         self.spacing_spin.setDecimals(4)
-        self.spacing_spin.setValue(1.016)
+        self.spacing_spin.setValue(1.5875)
         self.spacing_spin.setSuffix(" mm")
         self.spacing_spin.setToolTip(
-            "Signatone SP4 uç aralığı — kafanızın modeline bakın "
-            "(40 mil = 1.016 mm, 62.5 mil = 1.5875 mm)")
+            "Signatone SP4 uç aralığı — model numarasının ilk iki hanesinden "
+            "(40 mil = 1.016 mm, 50 mil = 1.27 mm, 62.5 mil = 1.5875 mm). "
+            "Mevcut prob: SP4-62085TRY → 62.5 mil = 1.5875 mm.")
         form.addRow("Uç aralığı (s):", self.spacing_spin)
 
         self.thickness_edit = UnitValueEdit(THICKNESS_UNITS, 0.0, "nm")
@@ -954,7 +955,7 @@ class MainWindow(QMainWindow):
         combo_by_data(self.geometry_combo, st.get("geometry", "infinite"))
         self.diameter_spin.setValue(st.get("diameter", 100.0))
         self.manual_factor_spin.setValue(st.get("manual_factor", 4.5324))
-        self.spacing_spin.setValue(st.get("spacing", 1.016))
+        self.spacing_spin.setValue(st.get("spacing", 1.5875))
         self.thickness_edit.restore(st.get("thickness", {}))
         self.thick_corr_check.setChecked(st.get("thick_corr", True))
         self.autosave_check.setChecked(st.get("autosave", False))

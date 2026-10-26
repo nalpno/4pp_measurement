@@ -103,9 +103,10 @@ Ayar değiştirildiyse cihazı kapatıp açın. GPIB değil **RS-232** seçili o
 3. **Ölçüm ayarları**: gürültülü ortamda NPLC'yi *Yavaş (10)* yapın ve/veya
    tekrar filtresini açın. **4 telli ölçüm mutlaka açık olmalıdır.**
    S302-6 standının bağlı olduğu terminali (ön/arka) seçin.
-4. **Numune**: SP4 kafanızın uç aralığını girin (modeline bakın: 40 mil = 1.016 mm,
-   62.5 mil = 1.5875 mm — yalnızca küçük numune ve kalınlık düzeltmelerinde kullanılır).
-   Film kalınlığını girerseniz özdirenç de hesaplanır.
+4. **Numune**: SP4 kafanızın uç aralığını girin (model numarasından: 40 mil =
+   1.016 mm, 50 mil = 1.27 mm, 62.5 mil = 1.5875 mm — yalnızca küçük numune ve
+   kalınlık düzeltmelerinde kullanılır; büyük numunede Rs'yi etkilemez).
+   Mevcut sistemin probu **SP4-62085TRY → 62.5 mil = 1.5875 mm** (varsayılan).
 5. **▶ Ölçümü Başlat**: grafik canlı çizilir; bitince R, R², Rs, ρ görünür.
 6. **CSV olarak kaydet** ile veriyi alın (grafiğe sağ tıklayıp *Export* ile
    PNG de alınabilir).
